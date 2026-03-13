@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的专属收藏夹 · 智能折叠拖拽</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Microsoft YaHei', sans-serif;
+            user-select: none; 
+            -webkit-user-select: none;
+        }
+
+        body {
+            background-color: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 20px 0;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .filter-group, .sort-group, .edit-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        select, button, input {
+            padding: 8px 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 1rem;
+            background-color: white;
+            cursor: pointer;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+
+        button { transition: background-color 0.3s; }
+        .edit-btn { background-color: #e53e3e; color: white; border: none; }
+        .edit-btn:hover { background-color: #c53030; }
+        .save-btn { background-color: #38a169; color: white; border: none; }
+        .save-btn:hover { background-color: #2f855a; }
+        .normal-btn { background-color: #667eea; color: white; border: none; }
+        .normal-btn:hover { background-color: #5a67d8; }
+        .add-btn { background-color: #4299e1; color: white; border: none; }
+        .add-btn:hover { background-color: #3182ce; }
+
+        /* 国风配色定义 */
+        .category-搜索引擎 { --category-color: #e63946; --category-bg: #fff1f2; }
+        .category-编程开发 { --category-color: #1d3557; --category-bg: #f1f5f9; }
+        .category-知识社区 { --category-color: #457b9d; --category-bg: #f0f7ff; }
+        .category-视频娱乐 { --category-color: #f77f00; --category-bg: #fff8e6; }
+        .category-购物消费 { --category-color: #7209b7; --category-bg: #faf0f5; }
+        .category-阅读学习 { --category-color: #023e8a; --category-bg: #e8f4f8; }
+        .category-音乐娱乐 { --category-color: #c1121f; --category-bg: #fef7fb; }
+        .category-工具服务 { --category-color: #0077b6; --category-bg: #e6f7ff; }
+        .category-办公通信 { --category-color: #2a9d8f; --category-bg: #eaf6fa; }
+        .category-交通出行 { --category-color: #e9c46a; --category-bg: #fffbf0; }
+        .category-导航网站 { --category-color: #f4a261; --category-bg: #fff5eb; }
+        .category-求职招聘 { --category-color: #264653; --category-bg: #f8f9fa; }
+        .category-政务服务 { --category-color: #0096c7; --category-bg: #e0f7fa; }
+        .category-其他 { --category-color: #6c757d; --category-bg: #f5f5f5; }
+
+        /* 分类卡片基础样式 */
+        .category-section {
+            margin: 30px 0 15px 0;
+            cursor: grab; 
+            transition: transform 0.2s, opacity 0.2s, margin 0.2s;
+            position: relative;
+            z-index: 1;
+            background: transparent;
+        }
+
+        .category-section:active { cursor: grabbing; }
+        .category-section.editing-disabled { cursor: default; }
+        .category-section.editing-disabled:active { cursor: default; }
+
+        /* 拖拽中的当前元素样式 */
+        .category-section.is-dragging {
+            opacity: 0.3;
+            transform: scale(0.98);
+            border: 2px dashed #ccc;
+            background-color: rgba(0,0,0,0.02);
+        }
+
+        /* 【核心修改】拖拽模式下的全局样式 */
+        /* 当容器处于 dragging-mode 时，隐藏所有非拖拽元素的书签网格 */
+        .dragging-mode .category-section:not(.is-dragging) .bookmarks-grid {
+            display: none !important;
+            height: 0;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        /* 拖拽模式下，所有分类的标题栏变紧凑，方便查看顺序 */
+        .dragging-mode .category-title {
+            padding: 8px 15px;
+            font-size: 1.1rem; /* 字体稍小 */
+            margin-bottom: 5px;
+            border-radius: 4px;
+            /* 增加一点阴影让层级更分明 */
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        /* 拖拽模式下，隐藏标题中的数量统计，更简洁 */
+        .dragging-mode .category-title span.count-badge {
+            display: none;
+        }
+
+        .category-title {
+            font-size: 1.5rem;
+            color: var(--category-color);
+            padding: 10px 15px;
+            background-color: var(--category-bg);
+            border-left: 5px solid var(--category-color);
+            margin-bottom: 15px;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: none; 
+            transition: all 0.2s ease;
+        }
+        
+        .category-title input, 
+        .category-title button,
+        .bookmark-card,
+        .bookmark-card * {
+            pointer-events: auto;
+        }
+
+        .category-title-edit {
+            padding: 5px 10px;
+            border: 1px solid var(--category-color);
+            border-radius: 4px;
+            color: var(--category-color);
+            font-size: 1rem;
+            width: 200px;
+            pointer-events: auto;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+
+        .edit-category-btn {
+            padding: 5px 10px;
+            font-size: 0.9rem;
+            background-color: var(--category-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            pointer-events: auto;
+        }
+
+        .bookmarks-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+            margin-top: 10px;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        .bookmark-card {
+            background-color: white;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: transform 0.3s, box-shadow 0.3s;
+            position: relative;
+            border-left: 3px solid var(--category-color);
+            pointer-events: auto;
+            cursor: default;
+        }
+
+        .bookmark-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .bookmark-card h3 {
+            margin-bottom: 8px;
+            font-size: 1.2rem;
+            color: #2d3748;
+            pointer-events: none;
+        }
+
+        .bookmark-card a {
+            text-decoration: none;
+            color: var(--category-color);
+            word-break: break-all;
+            display: block;
+            pointer-events: auto;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+
+        .bookmark-card a:hover { text-decoration: underline; }
+
+        .bookmark-meta {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            font-size: 0.9rem;
+            color: #718096;
+            pointer-events: none;
+        }
+
+        .category-tag {
+            background-color: var(--category-bg);
+            color: var(--category-color);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+        }
+
+        .frequency-tag { color: #ed8936; font-weight: 500; }
+
+        .no-results {
+            text-align: center;
+            padding: 50px;
+            color: #718096;
+            font-size: 1.2rem;
+        }
+
+        .add-bookmark-form {
+            background-color: #f0f8fb;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            border: 2px dashed #4299e1;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+
+        /* 息屏样式 */
+        #screen-saver {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            background-color: #1a1a1a;
+            color: white;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            cursor: pointer;
+            font-family: 'SimHei', 'Microsoft YaHei', sans-serif;
+            user-select: none;
+        }
+        #screen-saver.active { display: flex; }
+        .datetime-text { font-size: 5rem; margin-bottom: 30px; letter-spacing: 5px; }
+        .quote-text { font-size: 1.5rem; max-width: 80%; text-align: center; line-height: 1.8; color: #e0e0e0; }
+
+        /* 自定义拖拽幽灵元素 */
+        .drag-ghost {
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            transform: rotate(-2deg);
+            opacity: 0.95;
+            width: 300px;
+            padding: 15px;
+            border-left: 5px solid var(--category-color, #667eea);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .drag-ghost .ghost-title { font-weight: bold; font-size: 1.2rem; color: #333; }
+        .drag-ghost .ghost-count { font-size: 0.9rem; color: #666; }
+
+        @media (max-width: 768px) {
+            .controls { flex-direction: column; align-items: stretch; }
+            .filter-group, .sort-group, .edit-group { justify-content: center; }
+            h1 { font-size: 2rem; }
+            .category-title { font-size: 1.3rem; flex-direction: column; align-items: flex-start; gap: 10px; }
+            .category-title-edit { width: 100%; }
+            .datetime-text { font-size: 2.5rem; }
+            .quote-text { font-size: 1.2rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>我的专属收藏夹</h1>
+            <p>按分类分组展示 | 分类内排序 | 按打开频率统计 | 自定义编辑 | <strong>智能折叠拖拽</strong> | 息屏功能</p>
+        </header>
+
+        <div class="controls">
+            <div class="filter-group">
+                <label for="category-filter">分类筛选：</label>
+                <select id="category-filter">
+                    <option value="all">全部分类</option>
+                </select>
+            </div>
+
+            <div class="sort-group">
+                <label for="sort-type">排序方式：</label>
+                <select id="sort-type">
+                    <option value="frequency-desc">按打开频率（从高到低）</option>
+                    <option value="frequency-asc">按打开频率（从低到高）</option>
+                    <option value="name-asc">按名称（A-Z）</option>
+                    <option value="name-desc">按名称（Z-A）</option>
+                </select>
+                <button id="reset-btn" class="normal-btn">重置频率</button>
+            </div>
+
+            <div class="edit-group">
+                <button id="edit-mode-btn" class="edit-btn">开启自定义编辑模式</button>
+                <button id="save-edit-btn" class="save-btn" style="display: none;">保存编辑内容</button>
+            </div>
+        </div>
+
+        <!-- 新增书签表单 -->
+        <div id="add-bookmark-container" class="add-bookmark-form" style="display: none;">
+            <h3 style="margin-bottom: 15px; color: #4299e1;">新增书签</h3>
+            <div class="bookmark-edit-form">
+                <label>名称：</label>
+                <input type="text" id="new-bookmark-name" placeholder="请输入书签名称">
+                <label>网址：</label>
+                <input type="text" id="new-bookmark-url" placeholder="请输入完整网址（包含http://）">
+                <label>分类：</label>
+                <input type="text" id="new-bookmark-category" placeholder="请输入分类名称">
+                <div class="edit-actions">
+                    <button class="add-btn" onclick="addNewBookmark()">添加书签</button>
+                    <button class="edit-btn" onclick="clearAddForm()">清空</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 收藏夹展示容器 -->
+        <div id="bookmarks-container"></div>
+    </div>
+
+    <!-- 息屏层 -->
+    <div id="screen-saver">
+        <div class="datetime-text" id="saver-datetime"></div>
+        <div class="quote-text" id="saver-quote"></div>
+    </div>
+
+    <script>
+        (function() {
+            // ---------- 全局状态 ----------
+            let isEditMode = false;
+            let editedBookmarks = [];
+            let categoryOrder = [];
+            let idleTimer = null;
+            const IDLE_TIME = 30000;
+            let currentQuoteIndex = -1;
+            let saverTimer = null;
+            
+            // 拖拽相关状态
+            let dragState = {
+                isDragging: false,
+                draggedElement: null,
+                ghostElement: null,
+                startX: 0,
+                startY: 0,
+                threshold: 10
+            };
+
+            const philosophyQuotes = [
+                "且听风吟，静待花开。—— 村上春树",
+                "心有山海，静而无边。—— 林清玄",
+                "人生忽如寄，莫辜负茶、汤、好天气。—— 汪曾祺",
+                "凡是过往，皆为序章。—— 莎士比亚",
+                "岁月本长，而忙者自促；天地本宽，而鄙者自隘。—— 洪应明",
+                "草在结它的种子，风在摇它的叶子。我们站着，不说话，就十分美好。—— 顾城",
+                "生活最好的状态，是冷冷清清的风风火火。—— 木心",
+                "人闲桂花落，夜静春山空。—— 王维",
+                "不乱于心，不困于情。不畏将来，不念过往。—— 丰子恺",
+                "掬水月在手，弄花香满衣。—— 于良史",
+                "你来人间一趟，你要看看太阳。—— 海子",
+                "行稳致远，进而有为。—— 古语新编",
+                "一念放下，万般自在。—— 仓央嘉措",
+                "时光知味，岁月沉香。—— 林清玄",
+                "以清净心看世界，以欢喜心过生活。—— 丰子恺"
+            ];
+
+            // 初始数据 (简化版，实际使用会加载 localStorage)
+            let bookmarksData = [
+                { name: "百度", url: "https://www.baidu.com", category: "搜索引擎", frequency: 56 },
+                { name: "Google", url: "https://www.google.com/", category: "搜索引擎", frequency: 48 },
+                { name: "GitHub", url: "https://github.com/", category: "编程开发", frequency: 60 },
+                { name: "CSDN", url: "https://www.csdn.net", category: "编程开发", frequency: 45 },
+                { name: "知乎", url: "https://www.zhihu.com", category: "知识社区", frequency: 40 },
+                { name: "B站", url: "https://www.bilibili.com", category: "视频娱乐", frequency: 35 },
+                { name: "淘宝", url: "https://www.taobao.com", category: "购物消费", frequency: 25 },
+                { name: "微信读书", url: "https://weread.qq.com", category: "阅读学习", frequency: 28 },
+                { name: "网易云音乐", url: "https://music.163.com", category: "音乐娱乐", frequency: 30 },
+                { name: "百度网盘", url: "https://pan.baidu.com/disk/main#/index", category: "工具服务", frequency: 35 },
+                { name: "QQ邮箱", url: "https://mail.qq.com/", category: "办公通信", frequency: 30 },
+                { name: "12123", url: "https://gd.122.gov.cn/", category: "交通出行", frequency: 10 },
+                { name: "智联招聘", url: "https://www.zhaopin.com/", category: "求职招聘", frequency: 8 },
+                { name: "政务服务网", url: "http://www.gdzwfw.gov.cn/", category: "政务服务", frequency: 5 },
+                { name: "虎嗅", url: "https://www.huxiu.com/", category: "其他", frequency: 12 }
+            ];
+
+            // ---------- 本地存储 ----------
+            function loadFromLocalStorage() {
+                const savedData = localStorage.getItem('myBookmarks');
+                const savedOrder = localStorage.getItem('categoryOrder');
+                if (savedData) bookmarksData = JSON.parse(savedData);
+                if (savedOrder) categoryOrder = JSON.parse(savedOrder);
+                else categoryOrder = [...new Set(bookmarksData.map(item => item.category))];
+                editedBookmarks = JSON.parse(JSON.stringify(bookmarksData));
+            }
+            function saveToLocalStorage() {
+                localStorage.setItem('myBookmarks', JSON.stringify(bookmarksData));
+                localStorage.setItem('categoryOrder', JSON.stringify(categoryOrder));
+            }
+
+            function generateCategoryOptions() {
+                const filter = document.getElementById('category-filter');
+                filter.innerHTML = '<option value="all">全部分类</option>';
+                const cats = [...new Set(bookmarksData.map(i => i.category))];
+                cats.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c; opt.textContent = c;
+                    filter.appendChild(opt);
+                });
+            }
+
+            function saveCategoryOrder() {
+                const sections = document.querySelectorAll('.category-section');
+                const newOrder = [];
+                sections.forEach(s => {
+                    const cat = s.dataset.category;
+                    if (cat) newOrder.push(cat);
+                });
+                if (JSON.stringify(newOrder) !== JSON.stringify(categoryOrder)) {
+                    categoryOrder = newOrder;
+                    saveToLocalStorage();
+                }
+            }
+
+            // ---------- 核心拖拽逻辑 ----------
+            
+            function handleMouseDown(e) {
+                if (isEditMode) return;
+                if (['INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'A'].includes(e.target.tagName)) return;
+                
+                const section = e.target.closest('.category-section');
+                if (!section) return;
+
+                dragState.isDragging = false;
+                dragState.draggedElement = section;
+                dragState.startX = e.clientX;
+                dragState.startY = e.clientY;
+
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+            }
+
+            function handleMouseMove(e) {
+                if (!dragState.draggedElement) return;
+
+                if (!dragState.isDragging) {
+                    const dx = Math.abs(e.clientX - dragState.startX);
+                    const dy = Math.abs(e.clientY - dragState.startY);
+                    if (dx > dragState.threshold || dy > dragState.threshold) {
+                        startDragOperation(e);
+                    }
+                    return;
+                }
+
+                if (dragState.ghostElement) {
+                    dragState.ghostElement.style.left = (e.clientX - 150) + 'px';
+                    dragState.ghostElement.style.top = (e.clientY - 50) + 'px';
+                    handleDragOver(e);
+                }
+            }
+
+            function startDragOperation(e) {
+                dragState.isDragging = true;
+                const section = dragState.draggedElement;
+                const container = document.getElementById('bookmarks-container');
+                
+                // 【关键步骤】添加 dragging-mode 类，触发 CSS 折叠效果
+                container.classList.add('dragging-mode');
+                
+                // 创建幽灵元素
+                const rect = section.getBoundingClientRect();
+                const ghost = document.createElement('div');
+                ghost.className = 'drag-ghost';
+                ghost.style.width = rect.width + 'px';
+                ghost.style.borderLeftColor = getComputedStyle(section).getPropertyValue('--category-color') || '#667eea';
+                
+                const titleText = section.querySelector('.category-title').innerText.split('（')[0];
+                ghost.innerHTML = `
+                    <div class="ghost-title">${titleText}</div>
+                    <div class="ghost-count">拖动排序中...</div>
+                `;
+                document.body.appendChild(ghost);
+                dragState.ghostElement = ghost;
+
+                // 原元素变为占位符
+                section.classList.add('is-dragging');
+                section.style.height = rect.height + 'px'; 
+                section.innerHTML = '<div style="height:100%; display:flex; align-items:center; justify-content:center; color:#ccc; border:2px dashed #ccc; border-radius:8px; background:#fafafa;">正在移动...</div>';
+
+                ghost.style.left = (e.clientX - 150) + 'px';
+                ghost.style.top = (e.clientY - 50) + 'px';
+            }
+
+            function handleDragOver(e) {
+                const container = document.getElementById('bookmarks-container');
+                const sections = Array.from(container.querySelectorAll('.category-section:not(.is-dragging)'));
+                
+                let insertBeforeElement = null;
+                const mouseY = e.clientY;
+                
+                // 由于其他分类已折叠，高度变小，计算更精准
+                for (let sec of sections) {
+                    const rect = sec.getBoundingClientRect();
+                    const center = rect.top + rect.height / 2;
+                    
+                    if (mouseY < center) {
+                        insertBeforeElement = sec;
+                        break;
+                    }
+                }
+
+                if (!insertBeforeElement) {
+                    container.appendChild(dragState.draggedElement);
+                } else {
+                    container.insertBefore(dragState.draggedElement, insertBeforeElement);
+                }
+            }
+
+            function handleMouseUp(e) {
+                if (!dragState.draggedElement) return;
+
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+
+                if (dragState.isDragging) {
+                    // 1. 清理幽灵元素
+                    if (dragState.ghostElement) {
+                        dragState.ghostElement.remove();
+                        dragState.ghostElement = null;
+                    }
+
+                    const section = dragState.draggedElement;
+                    section.classList.remove('is-dragging');
+                    section.style.height = '';
+                    
+                    // 2. 移除 dragging-mode 类，让其他分类展开
+                    document.getElementById('bookmarks-container').classList.remove('dragging-mode');
+                    
+                    // 3. 【关键修复】先保存顺序，然后重置拖拽状态
+                    saveCategoryOrder();
+                    
+                    // 必须在 renderBookmarks 之前将 isDragging 设为 false
+                    // 否则 renderBookmarks 里的保护机制会阻止重绘，导致留下“正在移动”的残影
+                    dragState.isDragging = false; 
+                    dragState.draggedElement = null;
+
+                    // 4. 现在安全地重绘，恢复所有内容
+                    renderBookmarks();
+                } else {
+                    // 如果只是点击没有拖动，也要清理状态
+                    dragState.draggedElement = null;
+                    dragState.isDragging = false;
+                }
+            }
+
+            // ---------- 核心渲染 ----------
+            function renderBookmarks() {
+                const container = document.getElementById('bookmarks-container');
+                // 如果正在拖拽，不要重绘，以免打断体验（虽然逻辑上 mouseup 后才调用）
+                if (dragState.isDragging) return; 
+
+                container.innerHTML = '';
+
+                const filterCat = document.getElementById('category-filter').value;
+                const sort = document.getElementById('sort-type').value;
+                let data = isEditMode ? editedBookmarks : bookmarksData;
+                let filtered = filterCat === 'all' ? data : data.filter(i => i.category === filterCat);
+
+                if (filtered.length === 0) {
+                    container.innerHTML = '<div class="no-results">暂无匹配的收藏夹</div>';
+                    return;
+                }
+
+                const grouped = {};
+                filtered.forEach(i => {
+                    if (!grouped[i.category]) grouped[i.category] = [];
+                    grouped[i.category].push(i);
+                });
+
+                let renderCats = [];
+                if (filterCat === 'all') {
+                    renderCats = categoryOrder.filter(c => grouped[c]);
+                    Object.keys(grouped).forEach(c => { if (!renderCats.includes(c)) renderCats.push(c); });
+                } else {
+                    renderCats = [filterCat];
+                }
+
+                renderCats.forEach(cat => {
+                    let items = grouped[cat];
+                    if (sort === 'frequency-desc') items.sort((a,b) => b.frequency - a.frequency);
+                    else if (sort === 'frequency-asc') items.sort((a,b) => a.frequency - b.frequency);
+                    else if (sort === 'name-asc') items.sort((a,b) => a.name.localeCompare(b.name, 'zh-CN'));
+                    else if (sort === 'name-desc') items.sort((a,b) => b.name.localeCompare(a.name, 'zh-CN'));
+
+                    const section = document.createElement('div');
+                    section.className = `category-section category-${cat}`;
+                    section.dataset.category = cat;
+                    
+                    if (isEditMode) section.classList.add('editing-disabled');
+
+                    const titleDiv = document.createElement('h2');
+                    titleDiv.className = 'category-title';
+
+                    if (isEditMode) {
+                        titleDiv.innerHTML = `
+                            <input type="text" class="category-title-edit" value="${cat}" data-old="${cat}" onclick="event.stopPropagation()">
+                            <button class="edit-category-btn" onclick="event.stopPropagation(); updateCategoryName('${cat}', this.previousElementSibling.value)">保存分类名</button>
+                        `;
+                    } else {
+                        // 将数量放入 span 以便拖拽时隐藏
+                        titleDiv.innerHTML = `${cat} <span class="count-badge" style="font-size:0.9rem; opacity:0.8; font-weight:normal;">（共${items.length}个）</span>`;
+                    }
+
+                    const grid = document.createElement('div');
+                    grid.className = 'bookmarks-grid';
+
+                    items.forEach(item => {
+                        const card = document.createElement('div');
+                        card.className = 'bookmark-card';
+                        if (isEditMode) {
+                            const idx = editedBookmarks.findIndex(b => b.name === item.name && b.url === item.url);
+                            card.innerHTML = `
+                                <div class="bookmark-edit-form" style="pointer-events:auto; user-select:text;">
+                                    <label>名称：</label>
+                                    <input type="text" class="bookmark-name-edit" value="${item.name}" data-index="${idx}" onclick="event.stopPropagation()">
+                                    <label>网址：</label>
+                                    <input type="text" class="bookmark-url-edit" value="${item.url}" onclick="event.stopPropagation()">
+                                    <label>分类：</label>
+                                    <input type="text" class="bookmark-category-edit" value="${item.category}" onclick="event.stopPropagation()">
+                                    <div class="edit-actions">
+                                        <button class="save-btn" onclick="event.stopPropagation(); updateBookmark(${idx}, this.parentElement.previousElementSibling.previousElementSibling.value, this.parentElement.previousElementSibling.value, this.parentElement.previousElementSibling.nextElementSibling.value)">保存</button>
+                                        <button class="edit-btn" onclick="event.stopPropagation(); deleteBookmark(${idx})">删除</button>
+                                    </div>
+                                </div>
+                            `;
+                        } else {
+                            card.innerHTML = `
+                                <h3>${item.name}</h3>
+                                <a href="${item.url}" target="_blank" data-id="${item.name}">${item.url}</a>
+                                <div class="bookmark-meta">
+                                    <span class="category-tag">${item.category}</span>
+                                    <span class="frequency-tag">访问次数：${item.frequency}</span>
+                                </div>
+                            `;
+                            const link = card.querySelector('a');
+                            link.addEventListener('click', (e) => {
+                                e.stopPropagation(); 
+                                const globalIdx = bookmarksData.findIndex(b => b.name === item.name && b.url === item.url);
+                                if (globalIdx !== -1) {
+                                    bookmarksData[globalIdx].frequency++;
+                                    if (isEditMode) editedBookmarks[globalIdx].frequency++;
+                                    saveToLocalStorage();
+                                    renderBookmarks();
+                                }
+                            });
+                        }
+                        grid.appendChild(card);
+                    });
+
+                    section.appendChild(titleDiv);
+                    section.appendChild(grid);
+                    container.appendChild(section);
+                });
+                
+                resetIdleTimer();
+            }
+
+            // ---------- 编辑相关函数 ----------
+            window.updateCategoryName = function(oldName, newName) {
+                if (!newName.trim()) return alert('分类名不能为空');
+                editedBookmarks.forEach(i => { if (i.category === oldName) i.category = newName.trim(); });
+                const idx = categoryOrder.indexOf(oldName);
+                if (idx !== -1) categoryOrder[idx] = newName.trim();
+                saveToLocalStorage();
+                renderBookmarks();
+            };
+
+            window.updateBookmark = function(index, name, url, cat) {
+                if (!name.trim() || !url.trim()) return alert('名称和网址不能为空');
+                const oldCat = editedBookmarks[index].category;
+                editedBookmarks[index] = { ...editedBookmarks[index], name: name.trim(), url: url.trim(), category: cat.trim() };
+                if (oldCat !== cat.trim() && !categoryOrder.includes(cat.trim())) {
+                    categoryOrder.push(cat.trim());
+                    saveToLocalStorage();
+                }
+                renderBookmarks();
+            };
+
+            window.deleteBookmark = function(index) {
+                if (confirm('确定删除该书签？')) {
+                    editedBookmarks.splice(index, 1);
+                    renderBookmarks();
+                }
+            };
+
+            window.addNewBookmark = function() {
+                const name = document.getElementById('new-bookmark-name').value.trim();
+                const url = document.getElementById('new-bookmark-url').value.trim();
+                const cat = document.getElementById('new-bookmark-category').value.trim();
+                if (!name || !url || !cat) return alert('所有字段都不能为空');
+                if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('file://')) 
+                    return alert('网址需以 http:// 或 https:// 或 file:// 开头');
+                editedBookmarks.push({ name, url, category: cat, frequency: 0 });
+                if (!categoryOrder.includes(cat)) categoryOrder.push(cat);
+                clearAddForm();
+                renderBookmarks();
+                alert('书签添加成功');
+            };
+
+            window.clearAddForm = function() {
+                document.getElementById('new-bookmark-name').value = '';
+                document.getElementById('new-bookmark-url').value = '';
+                document.getElementById('new-bookmark-category').value = '';
+            };
+
+            function toggleEditMode() {
+                isEditMode = !isEditMode;
+                const btn = document.getElementById('edit-mode-btn');
+                const saveBtn = document.getElementById('save-edit-btn');
+                const addForm = document.getElementById('add-bookmark-container');
+                if (isEditMode) {
+                    btn.textContent = '关闭自定义编辑模式';
+                    saveBtn.style.display = 'inline-block';
+                    addForm.style.display = 'block';
+                } else {
+                    btn.textContent = '开启自定义编辑模式';
+                    saveBtn.style.display = 'none';
+                    addForm.style.display = 'none';
+                    editedBookmarks = JSON.parse(JSON.stringify(bookmarksData));
+                }
+                renderBookmarks();
+            }
+
+            function saveEditContent() {
+                if (confirm('确定保存所有编辑内容？')) {
+                    bookmarksData = JSON.parse(JSON.stringify(editedBookmarks));
+                    saveToLocalStorage();
+                    generateCategoryOptions();
+                    isEditMode = false;
+                    document.getElementById('edit-mode-btn').textContent = '开启自定义编辑模式';
+                    document.getElementById('save-edit-btn').style.display = 'none';
+                    document.getElementById('add-bookmark-container').style.display = 'none';
+                    renderBookmarks();
+                }
+            }
+
+            function resetFrequencies() {
+                if (confirm('重置所有访问次数？')) {
+                    bookmarksData.forEach(i => i.frequency = 0);
+                    editedBookmarks.forEach(i => i.frequency = 0);
+                    saveToLocalStorage();
+                    renderBookmarks();
+                }
+            }
+
+            // ---------- 息屏功能 ----------
+            function getRandomQuote() {
+                let rand; do { rand = Math.floor(Math.random() * philosophyQuotes.length); } 
+                while (rand === currentQuoteIndex && philosophyQuotes.length > 1);
+                currentQuoteIndex = rand;
+                return philosophyQuotes[rand];
+            }
+            function updateScreenSaverTime() {
+                const now = new Date();
+                document.getElementById('saver-datetime').textContent = 
+                    now.toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric',weekday:'long'}) + ' ' +
+                    now.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+            }
+            function initScreenSaverContent() {
+                updateScreenSaverTime();
+                document.getElementById('saver-quote').textContent = getRandomQuote();
+            }
+            function startScreenSaver() {
+                if (dragState.isDragging) { resetIdleTimer(); return; }
+                initScreenSaverContent();
+                document.getElementById('screen-saver').classList.add('active');
+                saverTimer = setInterval(updateScreenSaverTime, 1000);
+            }
+            function stopScreenSaver() {
+                document.getElementById('screen-saver').classList.remove('active');
+                clearInterval(saverTimer);
+                resetIdleTimer();
+            }
+            function resetIdleTimer() {
+                clearTimeout(idleTimer);
+                idleTimer = setTimeout(startScreenSaver, IDLE_TIME);
+            }
+
+            // ---------- 初始化 ----------
+            function init() {
+                loadFromLocalStorage();
+                generateCategoryOptions();
+                renderBookmarks();
+
+                document.getElementById('bookmarks-container').addEventListener('mousedown', handleMouseDown);
+                document.getElementById('category-filter').addEventListener('change', renderBookmarks);
+                document.getElementById('sort-type').addEventListener('change', renderBookmarks);
+                document.getElementById('reset-btn').addEventListener('click', resetFrequencies);
+                document.getElementById('edit-mode-btn').addEventListener('click', toggleEditMode);
+                document.getElementById('save-edit-btn').addEventListener('click', saveEditContent);
+                document.getElementById('screen-saver').addEventListener('click', stopScreenSaver);
+
+                ['click','mousemove','keydown','scroll','touchmove'].forEach(ev => 
+                    document.addEventListener(ev, resetIdleTimer)
+                );
+                resetIdleTimer();
+            }
+
+            window.addEventListener('DOMContentLoaded', init);
+        })();
+    </script>
+</body>
+</html>
